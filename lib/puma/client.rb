@@ -160,8 +160,6 @@ module Puma
       @read_header = true
       @read_proxy = !!@expect_proxy_proto
       @env = @proto_env.dup
-      @body = nil
-      @tempfile = nil
       @parsed_bytes = 0
       @ready = false
       @body_remain = 0
@@ -190,16 +188,25 @@ module Puma
         rescue IOError
           # swallow it
         end
-
       end
     end
 
     def close
+      tempfile_close
       begin
         @io.close
       rescue IOError, Errno::EBADF
         Puma::Util.purge_interrupt_queue
       end
+    end
+
+    def tempfile_close
+      tf_path = @tempfile&.path
+      @tempfile&.close
+      File.unlink(tf_path) if tf_path
+      @tempfile = nil
+      @body = nil
+    rescue Errno::ENOENT, IOError
     end
 
     # If necessary, read the PROXY protocol from the buffer. Returns
@@ -240,6 +247,7 @@ module Puma
 
       return read_body if in_data_phase
 
+      data = nil
       begin
         data = @io.read_nonblock(CHUNK_SIZE)
       rescue IO::WaitReadable
@@ -403,18 +411,33 @@ module Puma
         return true
       end
 
-      remain = cl.to_i - body.bytesize
+      content_length = cl.to_i
+
+      remain = content_length - body.bytesize
 
       if remain <= 0
-        @body = StringIO.new(body)
-        @buffer = nil
+        # Part of the body is a pipelined request OR garbage. We'll deal with that later.
+        if content_length == 0
+          @body = EmptyBody
+          if body.empty?
+            @buffer = nil
+          else
+            @buffer = body
+          end
+        elsif remain == 0
+          @body = StringIO.new body
+          @buffer = nil
+        else
+          @body = StringIO.new(body[0,content_length])
+          @buffer = body[content_length..-1]
+        end
         set_ready
         return true
       end
 
       if remain > MAX_BODY
-        @body = Tempfile.new(Const::PUMA_TMP_BASE)
-        @body.unlink
+        @body = Tempfile.create(Const::PUMA_TMP_BASE)
+        File.unlink @body.path unless IS_WINDOWS
         @body.binmode
         @tempfile = @body
       else
@@ -506,8 +529,8 @@ module Puma
       @prev_chunk = ""
       @excess_cr = 0
 
-      @body = Tempfile.new(Const::PUMA_TMP_BASE)
-      @body.unlink
+      @body = Tempfile.create(Const::PUMA_TMP_BASE)
+      File.unlink @body.path unless IS_WINDOWS
       @body.binmode
       @tempfile = @body
       @chunked_content_length = 0
@@ -627,7 +650,7 @@ module Puma
             @partial_part_left = len - part.size
           end
         else
-          if @prev_chunk.size + chunk.size >= MAX_CHUNK_HEADER_SIZE
+          if @prev_chunk.size + line.size >= MAX_CHUNK_HEADER_SIZE
             raise HttpParserError, "maximum size of chunk header exceeded"
           end
 
