@@ -817,7 +817,7 @@ class TestPumaServer < Minitest::Test
 
     body = socket.gets
 
-    assert_equal ["HTTP/1.0 200 OK", "content-type: plain/text", "connection: Keep-Alive", "content-length: 6"], h
+    assert_equal ["HTTP/1.0 200 OK", "content-type: plain/text", "connection: keep-alive", "content-length: 6"], h
     assert_equal "hello\n", body
   end
 
@@ -836,7 +836,7 @@ class TestPumaServer < Minitest::Test
 
     h = header socket
 
-    assert_equal ["HTTP/1.0 204 No Content", "connection: Keep-Alive"], h
+    assert_equal ["HTTP/1.0 204 No Content", "connection: keep-alive"], h
   end
 
   def test_http_10_close_without_body
@@ -1460,7 +1460,7 @@ class TestPumaServer < Minitest::Test
     server_run { [200, {}, [""]] }
 
     socket = send_http "GET / HTTP/1.0\r\nConnection: keep-alive\r\n\r\n"
-    assert_equal ["HTTP/1.0 200 OK", "connection: Keep-Alive", "content-length: 0"], header(socket)
+    assert_equal ["HTTP/1.0 200 OK", "connection: keep-alive", "content-length: 0"], header(socket)
 
     socket << "GET / HTTP/1.0\r\n\r\n"
     assert_equal ["HTTP/1.0 200 OK", "content-length: 0"], header(socket)

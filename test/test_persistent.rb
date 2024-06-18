@@ -151,7 +151,7 @@ class TestPersistent < Minitest::Test
     @client << @keep_request
     sz = @body[0].size.to_s
 
-    assert_equal "HTTP/1.0 200 OK\r\nx-header: Works\r\nconnection: Keep-Alive\r\ncontent-length: #{sz}\r\n\r\n", lines(5)
+    assert_equal "HTTP/1.0 200 OK\r\nx-header: Works\r\nconnection: keep-alive\r\ncontent-length: #{sz}\r\n\r\n", lines(5)
     assert_equal "Hello", @client.read(5)
   end
 
